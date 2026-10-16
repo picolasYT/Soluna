@@ -31,6 +31,7 @@ Already comfortable? Reference pages:
 - [CLI reference](cli.md) — every flag and exit code
 - [Extending Soluna](extending.md) — write tools and providers, use it as a library
 - [Troubleshooting](troubleshooting.md) — what to do when something goes wrong
+- [Releasing](releasing.md) — versioning and release checklist
 - [Glossary](glossary.md) — the terms used across these pages
 
 ---

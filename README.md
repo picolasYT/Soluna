@@ -25,6 +25,23 @@ Added email and password-length checks. Tests pass.
 zen/big-pickle · ██░░░░░░ 18% · 23k/128k · ↑4.2k ↓890 · 3 turns
 ```
 
+## Quick start
+
+Run Soluna directly from GitHub with Node.js 18 or newer:
+
+```bash
+git clone https://github.com/picolasYT/Soluna.git
+cd Soluna
+npm install
+npm test
+node bin/soluna.js
+```
+
+This starts Soluna in the current directory. Use `node bin/soluna.js --help`
+to see the available options. For the full setup and release steps, see
+[Getting started](docs/getting-started.md#run-from-github) and
+[Releasing Soluna](docs/releasing.md).
+
 ---
 
 ## Why Soluna
@@ -66,6 +83,7 @@ This repository ships a complete manual in [`docs/`](docs/). Read it in order wh
 | [docs/cli.md](docs/cli.md) | Full CLI reference |
 | [docs/extending.md](docs/extending.md) | Writing tools, providers, using as a library |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Common problems and fixes |
+| [docs/releasing.md](docs/releasing.md) | Versioning and release checklist |
 | [docs/glossary.md](docs/glossary.md) | Terminology |
 
 ---
@@ -96,6 +114,7 @@ It is built to be boring and reliable: a workspace sandbox stops the agent from 
 | [cli.md](cli.md) | Full CLI reference |
 | [extending.md](extending.md) | Writing tools, providers, using as a library |
 | [troubleshooting.md](troubleshooting.md) | Common problems and fixes |
+| [releasing.md](releasing.md) | Versioning and release checklist |
 | [glossary.md](glossary.md) | Terminology |
 
 ---
