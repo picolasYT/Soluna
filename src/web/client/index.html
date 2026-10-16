@@ -1,156 +1,100 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b0914" />
-  <meta name="description" content="Soluna — tu agente de programación con IA, extensible y privado." />
-  <title>Soluna — AI Coding Agent</title>
+  <meta name="theme-color" content="#090a10" />
+  <meta name="description" content="Soluna Cloud — tu espacio de programación con IA, desde el navegador." />
+  <title>Soluna Cloud</title>
   <link rel="stylesheet" href="/style.css" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1' y1='1' y2='0'%3E%3Cstop stop-color='%237dd3fc'/%3E%3Cstop offset='1' stop-color='%23a78bfa'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='28' fill='%23110e20'/%3E%3Cpath d='M64 23a30 30 0 1 0 13 49A25 25 0 0 1 64 23Z' fill='url(%23g)'/%3E%3Ccircle cx='68' cy='31' r='4' fill='%23f4f2ff'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='28' fill='%23090a10'/%3E%3Cpath d='M63 18a34 34 0 1 0 19 57A29 29 0 0 1 63 18Z' fill='%23b9a6ff'/%3E%3C/svg%3E" />
 </head>
 <body data-theme="dark">
-  <div id="app">
-    <!-- Sidebar: sessions, providers, status -->
+  <div id="app" class="app-shell">
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-header">
-        <div class="brand">
-          <div class="brand-mark" aria-hidden="true">☾</div>
-          <span class="brand-name">Soluna</span>
-        </div>
-        <button class="icon-btn" id="sidebar-close" aria-label="Close sidebar">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
+        <a class="brand" href="/" aria-label="Soluna Cloud inicio">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M20.4 3.8a12.3 12.3 0 1 0 8 21.9A13.1 13.1 0 0 1 20.4 3.8Z"/><circle cx="25.4" cy="7.2" r="1.2"/></svg></span>
+          <span class="brand-name">soluna<span>cloud</span></span>
+        </a>
+        <button class="icon-btn sidebar-close" id="sidebar-close" aria-label="Cerrar menú">×</button>
       </div>
 
-      <div class="sidebar-section">
-        <div class="sidebar-label">Provider</div>
-        <div class="provider-card" id="provider-card">
-          <span class="provider-dot"></span>
-          <span class="provider-name" id="provider-name">—</span>
-          <span class="provider-model" id="provider-model"></span>
-        </div>
-      </div>
+      <button class="new-session" id="btn-new"><span class="plus-icon">＋</span><span>Nueva tarea</span><kbd>⌘ K</kbd></button>
 
-      <div class="sidebar-section">
-        <div class="sidebar-label">Context</div>
-        <div class="context-card">
-          <div class="context-bar"><div class="context-fill" id="context-fill"></div></div>
-          <div class="context-stats">
-            <span id="context-used">0 tok</span>
-            <span id="context-limit">—</span>
-          </div>
-        </div>
-      </div>
+      <section class="workspace-card">
+        <div class="workspace-icon"><svg viewBox="0 0 24 24"><path d="M3.5 6.5h6l2 2h9v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M3.5 8.5h17"/></svg></div>
+        <div class="workspace-copy"><span class="eyebrow">PROYECTO ACTIVO</span><strong id="workspace-label">Workspace</strong><small id="workspace-path">Conectando…</small></div>
+        <span class="connection-dot" title="Servidor conectado"></span>
+      </section>
+      <button class="import-workspace" id="workspace-open"><span>＋</span> Importar repositorio</button>
 
-      <div class="sidebar-section">
-        <div class="sidebar-label">Usage</div>
+      <div class="section-heading"><span>Conversaciones</span><span class="section-count" id="session-count">—</span></div>
+      <div class="sessions-list" id="sessions-list"><div class="sessions-empty">Todavía no hay sesiones</div></div>
+
+      <section class="usage-card">
+        <div class="usage-card-top"><span>Uso de esta sesión</span><span class="usage-spark">↗</span></div>
+        <div class="context-bar"><div class="context-fill" id="context-fill"></div></div>
+        <div class="context-stats"><span id="context-used">0 tok</span><span id="context-limit">—</span></div>
         <div class="usage-grid">
-          <div class="usage-cell">
-            <div class="usage-value" id="usage-input">0</div>
-            <div class="usage-label">input</div>
-          </div>
-          <div class="usage-cell">
-            <div class="usage-value" id="usage-output">0</div>
-            <div class="usage-label">output</div>
-          </div>
-          <div class="usage-cell">
-            <div class="usage-value" id="usage-turns">0</div>
-            <div class="usage-label">turns</div>
-          </div>
-          <div class="usage-cell">
-            <div class="usage-value" id="usage-tools">0</div>
-            <div class="usage-label">tools</div>
-          </div>
+          <div><strong class="usage-value" id="usage-input">0</strong><span>entrada</span></div>
+          <div><strong class="usage-value" id="usage-output">0</strong><span>salida</span></div>
+          <div><strong class="usage-value" id="usage-turns">0</strong><span>turnos</span></div>
+          <div><strong class="usage-value" id="usage-tools">0</strong><span>herramientas</span></div>
         </div>
-      </div>
-
-      <div class="sidebar-section sidebar-section-grow">
-        <div class="sidebar-label">Sessions</div>
-        <div class="sessions-list" id="sessions-list"></div>
-      </div>
+      </section>
 
       <div class="sidebar-footer">
-        <button class="sidebar-btn" id="btn-new">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          New
-        </button>
-        <button class="sidebar-btn" id="btn-save">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-          Save
-        </button>
-        <button class="sidebar-btn" id="btn-theme">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-        </button>
+        <button class="sidebar-profile" id="btn-save" title="Guardar sesión"><span class="profile-avatar">P</span><span class="profile-copy"><strong>Mi espacio</strong><small>Soluna personal</small></span><span class="profile-more">···</span></button>
+        <div class="sidebar-tools"><button class="quiet-btn" id="btn-theme" aria-label="Cambiar tema" title="Cambiar tema"></button><button class="quiet-btn" id="settings-open" aria-label="Configuración" title="Configuración">⚙</button><button class="quiet-btn sidebar-toggle" id="sidebar-toggle" aria-label="Ocultar menú" title="Menú">☰</button></div>
       </div>
     </aside>
 
-    <!-- Main chat area -->
     <main class="main">
       <header class="topbar">
-        <button class="icon-btn sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-        </button>
-        <div class="topbar-title" id="topbar-title">New conversation</div>
+        <div class="topbar-left"><button class="icon-btn mobile-menu" id="sidebar-toggle-mobile" aria-label="Abrir menú">☰</button><div class="breadcrumb"><span>Soluna</span><span class="crumb-slash">/</span><strong id="topbar-title">Nueva tarea</strong></div></div>
         <div class="topbar-actions">
-          <span class="status-pill" id="status-pill">
-            <span class="status-dot"></span>
-            <span id="status-text">ready</span>
-          </span>
+          <label class="model-control"><span class="control-orb"></span><select id="provider-select" aria-label="Proveedor"><option value="">Proveedor</option></select><span class="control-divider"></span><select id="model-select" aria-label="Modelo"><option value="">Modelo</option></select><span class="select-caret">⌄</span></label>
+          <span class="status-pill" id="status-pill"><span class="status-dot"></span><span id="status-text">en línea</span></span>
         </div>
       </header>
 
-      <div class="transcript" id="transcript">
-        <div class="empty-state" id="empty-state">
-          <div class="empty-mark" aria-hidden="true">☾</div>
-          <h2>What can I help with?</h2>
-          <p>Ask me to read, edit, or run anything in your workspace.</p>
-          <div class="suggestions">
-            <button class="suggestion" data-msg="What files are in this repository?">What files are in this repository?</button>
-            <button class="suggestion" data-msg="Explain the main entry point">Explain the main entry point</button>
-            <button class="suggestion" data-msg="Add error handling to the API routes">Add error handling to the API routes</button>
+      <div class="work-area">
+        <section class="transcript" id="transcript">
+          <div class="empty-state" id="empty-state">
+            <div class="hero-orbit" aria-hidden="true"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><span class="orbit-spark">✦</span><span class="hero-moon"><svg viewBox="0 0 64 64"><path d="M40.8 8.7a23.8 23.8 0 1 0 15.5 42.5A25.4 25.4 0 0 1 40.8 8.7Z"/></svg></span><span class="orbit-dot"></span></div>
+            <div class="hero-kicker"><span class="live-pulse"></span> TU AGENTE, LISTO PARA CONSTRUIR</div>
+            <h1>¿Qué hacemos<br/><em>hoy?</em></h1>
+            <p>Describe una tarea y Soluna trabajará en tu proyecto desde la nube.</p>
+            <div class="suggestions">
+              <button class="suggestion" data-msg="Explora este proyecto y explicame como esta organizado"><span class="suggestion-icon violet">⌕</span><span><strong>Explorar proyecto</strong><small>Entender archivos y estructura</small></span><span class="suggestion-arrow">↗</span></button>
+              <button class="suggestion" data-msg="Revisa este proyecto y detecta errores o mejoras importantes"><span class="suggestion-icon blue">⌁</span><span><strong>Encontrar mejoras</strong><small>Revisar errores y oportunidades</small></span><span class="suggestion-arrow">↗</span></button>
+              <button class="suggestion" data-msg="Agrega una función nueva a este proyecto. Primero revisa como está organizado y luego implementala"><span class="suggestion-icon gold">✳</span><span><strong>Crear una función</strong><small>Pasar de idea a código</small></span><span class="suggestion-arrow">↗</span></button>
+            </div>
+            <div class="hero-footnote"><span class="sparkle-small">✦</span> Tu espacio de trabajo está listo <button id="workspace-open-hero">Importar un repositorio ↗</button></div>
           </div>
+        </section>
+        <div class="live-region" id="live-region">
+          <div class="compacting-banner" id="compacting-banner"><span class="spinner"></span><span id="compacting-text">Preparando contexto…</span></div>
+          <div class="stream-output" id="stream-output"></div>
         </div>
       </div>
 
-      <div class="live-region" id="live-region">
-        <div class="compacting-banner" id="compacting-banner">
-          <div class="spinner"></div>
-          <span id="compacting-text">Compacting…</span>
+      <footer class="composer-dock">
+        <div class="composer">
+          <div class="composer-inner"><span class="composer-mark">✦</span><textarea id="composer-input" rows="1" placeholder="Describe lo que querés construir…" autocomplete="off" spellcheck="false"></textarea><button class="composer-send" id="composer-send" aria-label="Enviar"><svg id="send-icon" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span id="stop-icon" class="spinner" style="display:none"></span></button></div>
+          <div class="composer-hint"><span><kbd>Enter</kbd> para enviar <i>·</i> <kbd>Shift + Enter</kbd> nueva línea</span><span class="model-hint" id="model-hint">Soluna</span></div>
         </div>
-        <div class="stream-output" id="stream-output"></div>
-      </div>
-
-      <div class="composer">
-        <div class="composer-inner">
-          <div class="composer-input-wrap">
-            <textarea id="composer-input" rows="1" placeholder="Message Soluna…" autocomplete="off" spellcheck="false"></textarea>
-          </div>
-          <button class="composer-send" id="composer-send" aria-label="Send">
-            <svg id="send-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 11l5-5 5 5M12 6v12"/></svg>
-            <div id="stop-icon" class="spinner" style="display:none"></div>
-          </button>
-        </div>
-        <div class="composer-hint">
-          <span id="model-hint">zen</span>
-          <span class="hint-dot">·</span>
-          <span>Shift+Enter for newline</span>
-        </div>
-      </div>
+        <div class="cloud-footer"><span><span class="footer-pulse"></span> Entorno cloud activo</span><span>Hecho para pensar en grande <b>✦</b></span></div>
+      </footer>
     </main>
   </div>
 
-  <!-- Ask modal -->
-  <div class="overlay" id="ask-overlay">
-    <div class="modal" id="ask-modal">
-      <h3 id="ask-title"></h3>
-      <div id="ask-body"></div>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" id="ask-cancel">Cancel</button>
-      </div>
-    </div>
-  </div>
+  <div class="overlay" id="ask-overlay"><div class="modal" id="ask-modal"><div class="modal-sigil">✦</div><h3 id="ask-title">Soluna necesita una decisión</h3><div id="ask-body"></div><div class="modal-actions"><button class="btn btn-ghost" id="ask-cancel">Cancelar</button></div></div></div>
+  <div class="overlay" id="settings-overlay"><div class="modal settings-modal"><button class="modal-close" id="settings-close" aria-label="Cerrar">×</button><div class="modal-sigil">☾</div><h3>Configuración del modelo</h3><p class="modal-subtitle">Conectá un proveedor para elegir cómo trabaja Soluna.</p><label class="field-label" for="settings-provider">Proveedor</label><select id="settings-provider" class="settings-select"></select><label class="field-label" for="settings-key">Clave API <span>opcional si el proveedor no la requiere</span></label><div class="key-row"><input id="settings-key" type="password" placeholder="Pegá tu clave API" autocomplete="off"/><button id="settings-save-key" class="btn btn-primary">Guardar clave</button></div><p class="settings-note" id="settings-note">La clave se guarda en la configuración privada de Soluna.</p></div></div>
+  <div class="overlay" id="workspace-overlay"><div class="modal workspace-modal"><button class="modal-close" id="workspace-close" aria-label="Cerrar">×</button><div class="modal-sigil">⌘</div><h3>Elegí tu proyecto</h3><p class="modal-subtitle">Importá un repositorio público de GitHub para trabajar en él desde la nube.</p><form id="workspace-form"><label class="field-label" for="workspace-url">URL del repositorio</label><div class="key-row"><input id="workspace-url" type="url" placeholder="https://github.com/usuario/proyecto" required/><button class="btn btn-primary" id="workspace-import" type="submit">Importar</button></div></form><p class="settings-note" id="workspace-note">Los repositorios se guardan en el almacenamiento persistente de esta instancia.</p><div class="section-heading modal-section-heading"><span>Proyectos importados</span></div><div id="workspace-list" class="workspace-list"></div></div></div>
 
   <script type="module" src="/app.js"></script>
+  <script type="module" src="/cloud.js"></script>
 </body>
 </html>
