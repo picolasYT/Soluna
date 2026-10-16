@@ -14,30 +14,39 @@ serves free models without authentication.
 
 ## Install
 
-After the npm package is published:
+### Run from GitHub
+
+Clone the repository, install its dependencies, run the test suite, and start
+Soluna from the checkout:
 
 ```bash
-npm install --global soluna-agent
-soluna --help
-```
-
-To run from a local source checkout instead:
-
-```bash
-# In the Soluna project directory:
+git clone https://github.com/picolasYT/Soluna.git
+cd Soluna
 npm install
-npm link          # optional: puts `soluna` on your PATH
-```
-
-If you skip `npm link`, run it with:
-
-```bash
+npm test
 node bin/soluna.js
 ```
 
-Verify the install:
+This starts Soluna in the current directory. To check the available CLI
+options without starting a session, run:
 
 ```bash
+node bin/soluna.js --help
+```
+
+To use the `soluna` command from any directory, optionally link this checkout:
+
+```bash
+npm link
+soluna --help
+```
+
+### Install from npm
+
+When the `soluna-agent` package is published, install it globally:
+
+```bash
+npm install --global soluna-agent
 soluna --help
 ```
 
