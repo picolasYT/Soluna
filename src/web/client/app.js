@@ -84,6 +84,7 @@ function handleEvent(ev) {
     case "ask-done": break;
     case "clear": clearTranscript(); break;
     case "session-restored": restoreTranscript(ev.messages || []); break;
+    case "run-queued": state.currentRunId = ev.id; break;
   }
 }
 
@@ -111,6 +112,7 @@ function bindComposer() {
 }
 
 function sendMessage() {
+  if (state.busy) return;
   const input = $("#composer-input");
   const text = input.value.trim();
   if (!text) return;
@@ -137,7 +139,9 @@ function sendMessage() {
 }
 
 function cancelRun() {
-  apiFetch("/api/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: state.currentRunId }) });
+  apiFetch("/api/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: state.currentRunId }) })
+    .then(() => finalizeStream(state.streamText))
+    .catch((error) => addErrorLine(error.message));
 }
 
 /* ---------------- Sidebar ---------------- */
@@ -395,6 +399,7 @@ function applyState(s) {
   if (s.contextLimit != null) state.contextLimit = s.contextLimit;
   if (s.provider) state.provider = s.provider;
   if (s.model) state.model = s.model;
+  if (s.currentRunId !== undefined) state.currentRunId = s.currentRunId;
   if (s.busy != null) setBusy(s.busy);
 
   if ($("#provider-name")) $("#provider-name").textContent = s.provider || "—";
