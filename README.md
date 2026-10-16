@@ -66,6 +66,7 @@ This repository ships a complete manual in [`docs/`](docs/). Read it in order wh
 | [docs/cli.md](docs/cli.md) | Full CLI reference |
 | [docs/extending.md](docs/extending.md) | Writing tools, providers, using as a library |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Common problems and fixes |
+| [docs/releasing.md](docs/releasing.md) | Versioning and release checklist |
 | [docs/glossary.md](docs/glossary.md) | Terminology |
 
 ---
