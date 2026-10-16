@@ -1,6 +1,9 @@
 import http from "node:http";
+import { timingSafeEqual } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { stat, createReadStream } from "node:fs";
-import { stat as statP } from "node:fs/promises";
+import { mkdir, readdir, stat as statP } from "node:fs/promises";
 import { extname, join, normalize, resolve, sep } from "node:path";
 
 import { Workspace, WorkspaceError } from "../core/workspace.js";
@@ -29,6 +32,7 @@ import {
   saveCustomProvider,
   addCustomModel,
   Session,
+  SOLUNA_HOME,
   listSessions,
   loadSession,
   deleteSession,
@@ -38,8 +42,10 @@ import {
 import { loadModelLimits, getContextLimit } from "../core/tokens.js";
 import { renderSkillsPrompt } from "../core/skills.js";
 import { uiBridge } from "../core/ui-bridge.js";
-import { indexHtml, newRunId, clientBase } from "./events.js";
+import { indexHtml, loginHtml, newRunId, clientBase } from "./events.js";
 import { Jobs } from "./jobs.js";
+
+const execFileAsync = promisify(execFile);
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -84,7 +90,8 @@ export async function startWebServer(options = {}) {
   const providerId = initialProvider || config.provider || null;
   const model = initialModel || config.model || getDefaultModel(providerId, catalog);
 
-  const session = new Session({ cwd, provider: providerId, model });
+  let session = new Session({ cwd, provider: providerId, model });
+  const workspacesDir = join(SOLUNA_HOME, "workspaces");
   const jobs = new Jobs();
   const clients = new Set();
   const usage = { input: 0, output: 0, turns: 0, toolCalls: 0 };
@@ -498,12 +505,38 @@ export async function startWebServer(options = {}) {
     session.scheduleSave();
     append("session-restored", {
       id: restored.id,
-      messages: restored.messages.length,
+      messages: restored.messages,
     });
     pushSystem(
       `Resumed session ${restored.id} · ${restored.messages.length} messages${restored.summary ? " · has handoff document" : ""}`,
     );
     broadcastState();
+  }
+
+  async function workspaceList() {
+    await mkdir(workspacesDir, { recursive: true });
+    const entries = await readdir(workspacesDir, { withFileTypes: true });
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => ({
+      id: entry.name,
+      name: entry.name.replace(/__/g, "/"),
+      path: join(workspacesDir, entry.name),
+      active: resolve(workspacesDir, entry.name) === workspace.root,
+    }));
+  }
+
+  async function switchWorkspace(path) {
+    const destination = resolve(workspacesDir, path);
+    if (!destination.startsWith(workspacesDir + sep)) throw new Error("Workspace path is invalid");
+    const info = await statP(destination);
+    if (!info.isDirectory()) throw new Error("Workspace does not exist");
+    await session.flush();
+    workspace.allowDirectory(destination);
+    workspace.chdir(destination);
+    session = new Session({ cwd: destination, provider: providerId, model });
+    append("clear", {});
+    append("workspace-changed", { cwd: destination });
+    broadcastState();
+    return destination;
   }
 
   function formatTokens(n) {
@@ -615,10 +648,29 @@ export async function startWebServer(options = {}) {
     if (!token) return true;
     const header = req.headers.authorization || "";
     const q = new URL(req.url, "http://localhost");
-    return header === `Bearer ${token}` || q.searchParams.get("token") === token;
+    const cookie = (req.headers.cookie || "").split(";").map((part) => part.trim()).find((part) => part.startsWith("soluna_access="));
+    const cookieToken = cookie ? decodeURIComponent(cookie.slice("soluna_access=".length)) : "";
+    return secureEqual(header.replace(/^Bearer\s+/i, ""), token)
+      || secureEqual(q.searchParams.get("token") || "", token)
+      || secureEqual(cookieToken, token);
+  }
+
+  function secureEqual(candidate, expected) {
+    const left = Buffer.from(String(candidate));
+    const right = Buffer.from(String(expected));
+    return left.length === right.length && timingSafeEqual(left, right);
   }
 
   async function handleApi(req, res, path, query) {
+    if (req.method === "POST" && path === "/api/auth") {
+      if (!token) return sendError(res, 400, "Cloud access token is not configured");
+      const body = JSON.parse((await readBody(req)) || "{}");
+      if (!secureEqual(body.token || "", token)) return sendError(res, 401, "Invalid access token");
+      const secure = req.socket.encrypted || req.headers["x-forwarded-proto"] === "https";
+      res.setHeader("Set-Cookie", `soluna_access=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800${secure ? "; Secure" : ""}`);
+      return sendJSON(res, 200, { ok: true });
+    }
+
     if (req.method === "GET" && path === "/api/events") {
       if (!authOk(req)) return sendError(res, 401, "Unauthorized");
       res.writeHead(200, {
@@ -665,6 +717,63 @@ export async function startWebServer(options = {}) {
     if (req.method === "GET" && path === "/api/config") {
       if (!authOk(req)) return sendError(res, 401, "Unauthorized");
       return sendJSON(res, 200, await getCatalogInfo());
+    }
+
+    if (req.method === "GET" && path === "/api/workspaces") {
+      if (!authOk(req)) return sendError(res, 401, "Unauthorized");
+      return sendJSON(res, 200, { current: workspace.root, workspaces: await workspaceList() });
+    }
+
+    if (req.method === "POST" && path === "/api/workspaces/import") {
+      if (!authOk(req)) return sendError(res, 401, "Unauthorized");
+      if (jobs.running || jobs.queuedCount) return sendError(res, 409, "Wait for the active task to finish before changing projects");
+      const body = JSON.parse((await readBody(req)) || "{}");
+      let repoUrl;
+      try { repoUrl = new URL(String(body.url || "")); } catch { return sendError(res, 400, "Enter a valid public GitHub repository URL"); }
+      const parts = repoUrl.pathname.split("/").filter(Boolean);
+      if (repoUrl.protocol !== "https:" || repoUrl.hostname !== "github.com" || parts.length < 2) {
+        return sendError(res, 400, "Only public GitHub HTTPS repository URLs are supported");
+      }
+      const owner = parts[0];
+      const repository = parts[1].replace(/\.git$/i, "");
+      if (![owner, repository].every((part) => /^[A-Za-z0-9_.-]+$/.test(part))) {
+        return sendError(res, 400, "Repository URL contains unsupported characters");
+      }
+      const id = `${owner}__${repository}`;
+      const destination = join(workspacesDir, id);
+      await mkdir(workspacesDir, { recursive: true });
+      try {
+        await statP(destination);
+      } catch {
+        try {
+          await execFileAsync("git", ["clone", "--depth=1", `https://github.com/${owner}/${repository}.git`, destination], { timeout: 120000, maxBuffer: 2 * 1024 * 1024 });
+        } catch (error) {
+          return sendError(res, 400, `Could not import repository: ${(error.stderr || error.message || "git clone failed").toString().trim().slice(0, 500)}`);
+        }
+      }
+      try { await switchWorkspace(id); } catch (error) { return sendError(res, 400, error.message); }
+      return sendJSON(res, 200, { ok: true, id, cwd: workspace.root });
+    }
+
+    if (req.method === "POST" && path === "/api/workspaces/switch") {
+      if (!authOk(req)) return sendError(res, 401, "Unauthorized");
+      if (jobs.running || jobs.queuedCount) return sendError(res, 409, "Wait for the active task to finish before changing projects");
+      const body = JSON.parse((await readBody(req)) || "{}");
+      if (!/^[A-Za-z0-9_.-]+__[A-Za-z0-9_.-]+$/.test(String(body.id || ""))) return sendError(res, 400, "Workspace id is invalid");
+      try {
+        const cwd = await switchWorkspace(body.id);
+        return sendJSON(res, 200, { ok: true, cwd });
+      } catch (error) { return sendError(res, 404, error.message); }
+    }
+
+    if (req.method === "POST" && path === "/api/sessions/new") {
+      if (!authOk(req)) return sendError(res, 401, "Unauthorized");
+      if (jobs.running || jobs.queuedCount) return sendError(res, 409, "Wait for the active task to finish before starting a new session");
+      await session.flush();
+      session = new Session({ cwd: workspace.root, provider: providerId, model });
+      append("clear", {});
+      broadcastState();
+      return sendJSON(res, 200, { ok: true, id: session.id });
     }
 
     if (req.method === "POST" && path === "/api/message") {
@@ -764,10 +873,22 @@ export async function startWebServer(options = {}) {
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const path = url.pathname;
 
+      if (req.method === "GET" && path === "/healthz") return sendJSON(res, 200, { ok: true, name: "Soluna" });
+
       if (path.startsWith("/api/")) {
         return await handleApi(req, res, path, url.searchParams);
       }
-      if (!authOk(req)) return sendError(res, 401, "Unauthorized");
+      if (!authOk(req)) {
+        if (req.method === "GET" && (path === "/" || path === "/index.html")) {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+          return res.end(loginHtml());
+        }
+        return sendError(res, 401, "Unauthorized");
+      }
+      if (token && url.searchParams.get("token") && secureEqual(url.searchParams.get("token"), token)) {
+        const secure = req.socket.encrypted || req.headers["x-forwarded-proto"] === "https";
+        res.setHeader("Set-Cookie", `soluna_access=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800${secure ? "; Secure" : ""}`);
+      }
       return await serveStatic(req, res, path);
     } catch (err) {
       sendError(res, 500, err.message || "Internal error");
