@@ -17,12 +17,12 @@ process.on("uncaughtException", (err) => {
 
 function parseArgs(args) {
   const options = {
-    host: "localhost",
-    port: Number(process.env.SOLUNA_WEB_PORT || process.env.ZYN_WEB_PORT) || 3456,
+    host: process.env.SOLUNA_WEB_HOST || "localhost",
+    port: Number(process.env.SOLUNA_WEB_PORT || process.env.PORT || process.env.ZYN_WEB_PORT) || 3456,
     cwd: process.cwd(),
     unsafe: true,
     noMcp: false,
-    token: null,
+    token: process.env.SOLUNA_WEB_TOKEN || null,
     provider: null,
     model: null,
     verbose: false,
@@ -96,7 +96,8 @@ Options:
 export async function runWeb(args = []) {
   const options = parseArgs(args);
   setDebug(options.verbose || Boolean(process.env.SOLUNA_DEBUG || process.env.ZYN_DEBUG));
-  logger.info("web server starting", { ...options });
+  const { token: _token, ...safeOptions } = options;
+  logger.info("web server starting", { ...safeOptions, tokenConfigured: Boolean(_token) });
 
   const config = await loadConfig();
   const catalog = buildCatalog(config);
@@ -116,15 +117,16 @@ export async function runWeb(args = []) {
   });
 
   const url = `http://${options.host === "0.0.0.0" ? "localhost" : options.host}:${instance.port}`;
-  const access = options.token ? `${url}/?token=${encodeURIComponent(options.token)}` : url;
+  const access = process.env.RENDER_EXTERNAL_URL || url;
 
   console.log(`
 ${APP_DISPLAY_NAME} v${APP_VERSION} — web UI
   Open:        ${access}
+  Sign-in:     ${options.token ? "access token configured" : "no token required"}
   Working dir: ${instance.cwd}
   Provider:    ${instance.providerId || "not set (pick one in the UI)"}
   Model:       ${instance.model || "default"}
-  Guardrails:  ${options.unsafe ? "OFF (commands run without prompting — localhost only)" : "ON (risky commands need your approval in the browser)"}
+  Guardrails:  ${options.unsafe ? "OFF (shell commands run without prompting)" : "ON (risky commands need your approval in the browser)"}
   Ctrl-C to stop
 `);
 }
