@@ -97,6 +97,7 @@ It is built to be boring and reliable: a workspace sandbox stops the agent from 
 | [cli.md](cli.md) | Full CLI reference |
 | [extending.md](extending.md) | Writing tools, providers, using as a library |
 | [troubleshooting.md](troubleshooting.md) | Common problems and fixes |
+| [releasing.md](releasing.md) | Versioning and release checklist |
 | [glossary.md](glossary.md) | Terminology |
 
 ---
