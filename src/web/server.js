@@ -95,6 +95,7 @@ export async function startWebServer(options = {}) {
   const jobs = new Jobs();
   const clients = new Set();
   const usage = { input: 0, output: 0, turns: 0, toolCalls: 0 };
+  let activeController = null;
 
   // Latest events per client id, so a reconnecting tab can catch up.
   const journal = [];
@@ -191,6 +192,7 @@ export async function startWebServer(options = {}) {
       usage: { ...usage },
       queued: jobs.queuedCount,
       busy: Boolean(jobs.running),
+      currentRunId: jobs.running?.id || null,
     };
   }
 
@@ -254,12 +256,14 @@ export async function startWebServer(options = {}) {
     if (!provider) return;
 
     const controller = new AbortController();
+    activeController = controller;
 
     const upsert = (id, patch) => {
       append("tool-live", { id, ...patch });
     };
 
-    const result = await runAgentLoop({
+    try {
+      const result = await runAgentLoop({
       messages: session.messages,
       tools,
       provider,
@@ -328,13 +332,16 @@ export async function startWebServer(options = {}) {
           `Provider failed: ${String(error.message).slice(0, 90)} — retry ${attempt}/${attempts - 1} in ${Math.round(delay / 100) / 10}s`,
         );
       },
-    });
+      });
 
-    session.messages = result.messages.filter((m) => m.role !== "system");
-    session.summary = result.summary || session.summary;
-    usage.turns += 1;
-    session.scheduleSave();
-    broadcastState();
+      session.messages = result.messages.filter((m) => m.role !== "system");
+      session.summary = result.summary || session.summary;
+      usage.turns += 1;
+      session.scheduleSave();
+    } finally {
+      if (activeController === controller) activeController = null;
+      broadcastState();
+    }
   }
 
   function toolLabel(name, args) {
@@ -400,9 +407,10 @@ export async function startWebServer(options = {}) {
       return;
     }
 
-    enqueue("message", { label: clean.slice(0, 60) }, async () => {
+    const id = enqueue("message", { label: clean.slice(0, 60) }, async () => {
       await runTurn(clean);
     });
+    append("run-queued", { id });
   }
 
   function handleCommand(raw) {
@@ -794,7 +802,9 @@ export async function startWebServer(options = {}) {
     if (req.method === "POST" && path === "/api/cancel") {
       if (!authOk(req)) return sendError(res, 401, "Unauthorized");
       const body = JSON.parse((await readBody(req)) || "{}");
-      const ok = jobs.cancel(body.id);
+      const running = jobs.running?.id === body.id;
+      if (running) activeController?.abort();
+      const ok = running || jobs.cancel(body.id);
       return sendJSON(res, 200, { ok });
     }
 
@@ -955,13 +965,3 @@ export async function startWebServer(options = {}) {
       await new Promise((r) => server.close(r));
     },
   };
-}
-
-/** Resolve `latestSession` lazily to avoid a circular import at module load. */
-async function latestSession(cwd) {
-  const { latestSession: fn } = await import("../core/session-store.js");
-  return fn(cwd);
-}
-
-import { APP_DISPLAY_NAME } from "../config/constants.js";
-void APP_DISPLAY_NAME; // silence unused import lint (used above via closure)
