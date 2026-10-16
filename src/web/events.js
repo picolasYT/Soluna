@@ -34,6 +34,18 @@ export function indexHtml() {
   return cachedIndex;
 }
 
+let cachedLogin = null;
+/** Small self-contained sign-in page used when cloud access is protected. */
+export function loginHtml() {
+  if (cachedLogin) return cachedLogin;
+  try {
+    cachedLogin = readFileSync(join(webDir(), "login.html"), "utf-8");
+  } catch {
+    cachedLogin = "<!doctype html><meta charset=utf-8><title>Soluna Cloud</title><p>Soluna sign-in page unavailable.</p>";
+  }
+  return cachedLogin;
+}
+
 /** Unique id for a run / request. */
 export function newRunId() {
   return randomUUID().slice(0, 8);
