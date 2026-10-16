@@ -7,6 +7,25 @@ import { renderMarkdown } from "./markdown.js";
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+const emptyStateEl = $("#empty-state");
+
+// The cloud server can require a private access token. The first visit may
+// carry it as ?token=...; keep it for this tab, then remove it from the URL.
+const queryToken = new URLSearchParams(location.search).get("token");
+if (queryToken) {
+  try { sessionStorage.setItem("soluna-cloud-token", queryToken); } catch {}
+  history.replaceState({}, "", location.pathname + location.hash);
+}
+function apiUrl(path) {
+  const url = new URL(path, location.href);
+  let token = "";
+  try { token = sessionStorage.getItem("soluna-cloud-token") || ""; } catch {}
+  if (token) url.searchParams.set("token", token);
+  return url.pathname + url.search;
+}
+function apiFetch(path, options) { return fetch(apiUrl(path), options); }
+window.solunaApiUrl = apiUrl;
+window.solunaFetch = apiFetch;
 
 const state = {
   streaming: false,
@@ -38,7 +57,7 @@ function init() {
 
 function connect() {
   if (es) { es.close(); }
-  es = new EventSource("/api/events");
+  es = new EventSource(apiUrl("/api/events"));
 
   es.onmessage = (e) => {
     try { handleEvent(JSON.parse(e.data)); } catch {}
@@ -64,6 +83,7 @@ function handleEvent(ev) {
     case "ask": showAsk(ev.request); break;
     case "ask-done": break;
     case "clear": clearTranscript(); break;
+    case "session-restored": restoreTranscript(ev.messages || []); break;
   }
 }
 
@@ -99,7 +119,7 @@ function sendMessage() {
 
   if (text.startsWith("/")) {
     if (text === "/clear") { clearTranscript(); }
-    fetch("/api/message", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    apiFetch("/api/message", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
     return;
   }
 
@@ -109,7 +129,7 @@ function sendMessage() {
   setBusy(true);
   appendStreamEl();
 
-  fetch("/api/message", {
+  apiFetch("/api/message", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
@@ -117,13 +137,13 @@ function sendMessage() {
 }
 
 function cancelRun() {
-  fetch("/api/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: state.currentRunId }) });
+  apiFetch("/api/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: state.currentRunId }) });
 }
 
 /* ---------------- Sidebar ---------------- */
 
 function bindSidebar() {
-  $("#sidebar-toggle").addEventListener("click", () => $(".sidebar").classList.add("open"));
+  $("#sidebar-toggle").addEventListener("click", () => $(".sidebar").classList.toggle("open"));
   $("#sidebar-close").addEventListener("click", () => $(".sidebar").classList.remove("open"));
   $("#btn-new").addEventListener("click", () => { clearTranscript(); hideEmpty(); });
   $("#btn-save").addEventListener("click", () => addSystemLine("Session saves automatically on exit."));
@@ -150,7 +170,7 @@ function updateThemeIcon() {
 function bindAsk() {
   $("#ask-cancel").addEventListener("click", () => {
     $("#ask-overlay").classList.remove("show");
-    fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers: [] }) });
+    apiFetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers: [] }) });
   });
 }
 
@@ -175,7 +195,7 @@ function showAsk(request) {
     btn.innerHTML = `<span><span class="opt-label">${escapeHtml(opt.label)}</span>${opt.description ? `<br><span class="opt-desc">${escapeHtml(opt.description)}</span>` : ""}</span>`;
     btn.addEventListener("click", () => {
       overlay.classList.remove("show");
-      fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers: [opt.label] }) });
+      apiFetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers: [opt.label] }) });
     });
     body.appendChild(custom);
     custom.appendChild(btn);
@@ -202,12 +222,32 @@ function hideEmpty() { $("#empty-state")?.style.setProperty("display", "none"); 
 function showEmpty() { $("#empty-state")?.style.setProperty("display", "flex"); }
 
 function clearTranscript() {
-  $("#transcript").innerHTML = "";
+  $("#transcript").replaceChildren(emptyStateEl);
   showEmpty();
   state.streamText = "";
   state.streaming = false;
   $("#stream-output").classList.remove("show");
   $("#stream-output").innerHTML = "";
+}
+
+function restoreTranscript(messages) {
+  clearTranscript();
+  for (const message of messages) {
+    const content = typeof message.content === "string"
+      ? message.content
+      : Array.isArray(message.content)
+        ? message.content.filter((part) => part?.type === "text").map((part) => part.text).join("\n")
+        : "";
+    if (!content.trim()) continue;
+    if (message.role === "user") addUserMessage(content);
+    else if (message.role === "assistant") {
+      hideEmpty();
+      const wrap = el("div", "msg msg-assistant");
+      wrap.innerHTML = `<div class="msg-avatar">☾</div><div class="msg-body"><div class="msg-bubble">${renderMarkdown(content)}</div></div>`;
+      appendTranscript(wrap);
+    }
+  }
+  if (messages.length) hideEmpty();
 }
 
 function addUserMessage(text) {
@@ -357,9 +397,15 @@ function applyState(s) {
   if (s.model) state.model = s.model;
   if (s.busy != null) setBusy(s.busy);
 
-  $("#provider-name").textContent = s.provider || "—";
-  $("#provider-model").textContent = s.model || "";
+  if ($("#provider-name")) $("#provider-name").textContent = s.provider || "—";
+  if ($("#provider-model")) $("#provider-model").textContent = s.model || "";
   $("#model-hint").textContent = s.model || s.provider || "zen";
+  if (s.cwd) {
+    const parts = s.cwd.replace(/\\/g, "/").split("/").filter(Boolean);
+    $("#workspace-label").textContent = parts[parts.length - 1] || s.cwd;
+    $("#workspace-path").textContent = s.cwd;
+    $("#topbar-title").textContent = parts[parts.length - 1] || "Workspace";
+  }
 
   $("#usage-input").textContent = formatTokens(s.usage?.input || 0);
   $("#usage-output").textContent = formatTokens(s.usage?.output || 0);
@@ -381,7 +427,7 @@ function setBusy(busy) {
   state.busy = busy;
   const send = $("#composer-send");
   $("#status-pill").classList.toggle("busy", busy);
-  $("#status-text").textContent = busy ? "thinking…" : "ready";
+  $("#status-text").textContent = busy ? "trabajando…" : "en línea";
 
   if (busy) {
     send.classList.add("stop");
